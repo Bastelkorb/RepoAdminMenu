@@ -1,145 +1,142 @@
-﻿using ExitGames.Client.Photon;
-using Photon.Pun;
-using Photon.Realtime;
-using System.Linq;
+using System.Collections.Generic;
 
 namespace RepoAdminMenu.Utils {
-    internal class NetworkUtil : IOnEventCallback {
+    internal class MapUtil {
 
-        internal static NetworkUtil instance { get; private set; } = null;
-
-        internal bool registered = false;
-
-        internal string clientRandomString = string.Empty;
-
-        private static System.Random random = new System.Random();
-
-        internal const byte RAMEventCode = 180;
-
-
-        public NetworkUtil() {
-            instance = this;
-            if (!registered) {
-                RepoAdminMenu.mls.LogInfo("Registering network event callbacks");
-                PhotonNetwork.AddCallbackTarget(this);
-                registered = true;
-            }
-        }
+        private static readonly SortedDictionary<string, Level> maps = new SortedDictionary<string, Level>();
+        private static readonly SortedDictionary<string, Level> arenas = new SortedDictionary<string, Level>();
+        private static readonly SortedDictionary<string, Level> shops = new SortedDictionary<string, Level>();
+        private static readonly Dictionary<Level, bool> mapToggles = new Dictionary<Level, bool>();
+        private static Level nextLevel = null;
 
         public static void Init() {
-            if (instance == null) {
-                new NetworkUtil();
+            if (RunManager.instance == null) {
+                return;
+            }
+
+            if (maps.Count > 0 && mapToggles.Count > 0) {
+                return;
+            }
+
+            maps.Clear();
+            arenas.Clear();
+            shops.Clear();
+            mapToggles.Clear();
+
+            foreach (Level level in RunManager.instance.levels) {
+                if (level == null) {
+                    continue;
+                }
+
+                string key = level.name.Replace("Level - ", string.Empty);
+                if (!maps.ContainsKey(key)) {
+                    maps.Add(key, level);
+                }
+
+                if (!mapToggles.ContainsKey(level)) {
+                    mapToggles.Add(level, true);
+                }
+            }
+
+            foreach (Level level in RunManager.instance.levelArena) {
+                if (level == null) {
+                    continue;
+                }
+
+                string key = level.name.Replace("Level - ", string.Empty);
+                if (!arenas.ContainsKey(key)) {
+                    arenas.Add(key, level);
+                }
+            }
+
+            foreach (Level level in RunManager.instance.levelShop) {
+                if (level == null) {
+                    continue;
+                }
+
+                string key = level.name.Replace("Level - ", string.Empty);
+                if (!shops.ContainsKey(key)) {
+                    shops.Add(key, level);
+                }
             }
         }
 
-        private static string randomString(int length) {
-            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%";
-            return new string(Enumerable.Repeat(chars, length)
-                .Select(s => s[random.Next(s.Length)]).ToArray());
+        public static SortedDictionary<string, Level> getMaps() {
+            return maps;
         }
 
-        internal static void SendCommandSteamIDString(string command, string steamId, string value, ReceiverGroup receiverGroup) {
-            PhotonNetwork.RaiseEvent(RAMEventCode, new object[] { command, steamId, value }, new RaiseEventOptions { Receivers = receiverGroup }, SendOptions.SendReliable);
+        public static SortedDictionary<string, Level> getArenas() {
+            return arenas;
         }
 
-        internal static void SendCommandSteamIDStringInt(string command, string steamId, string str, int num, ReceiverGroup receiverGroup) {
-            PhotonNetwork.RaiseEvent(RAMEventCode, new object[] { command, steamId, str, num }, new RaiseEventOptions { Receivers = receiverGroup }, SendOptions.SendReliable);
+        public static SortedDictionary<string, Level> getShops() {
+            return shops;
         }
 
-        internal static void SendCommandString(string command, string value, ReceiverGroup receiverGroup) {
-            PhotonNetwork.RaiseEvent(RAMEventCode, new object[] { command, value }, new RaiseEventOptions { Receivers = receiverGroup }, SendOptions.SendReliable);
+        public static Dictionary<Level, bool> getMapToggles() {
+            return mapToggles;
         }
 
-        internal static void SendCommand(string command, ReceiverGroup receiverGroup) {
-            PhotonNetwork.RaiseEvent(RAMEventCode, new object[] { command }, new RaiseEventOptions { Receivers = receiverGroup }, SendOptions.SendReliable);
+        public static void setMapEnabled(Level level, bool enabled) {
+            if (level == null) {
+                return;
+            }
+
+            if (mapToggles.ContainsKey(level)) {
+                mapToggles[level] = enabled;
+            }
         }
 
-        public void OnEvent(EventData photonEvent) {
-            if (photonEvent.Code == RAMEventCode) {
-                //RepoAdminMenu.mls.LogInfo("Received RAM Network Event!");
-                object[] args = (object[])photonEvent.CustomData;
+        public static bool isMapEnabled(Level level) {
+            return level != null && mapToggles.GetValueOrDefault(level, false);
+        }
 
-                if (args.Length == 1) {
-                    string cmd = args[0].ToString();
+        public static int getEnabledCount() {
+            int count = 0;
+            foreach (bool enabled in mapToggles.Values) {
+                if (enabled) {
+                    count++;
+                }
+            }
+            return count;
+        }
 
-                    switch (cmd) {
-                        case "NeedSettings":
-                            Settings.UpdateClients();
-                            break;
-                        default:
-                            RepoAdminMenu.mls.LogWarning("Network event: Unknown command(" + args.Length + "): " + cmd);
-                            break;
-                    }
-                } else if (args.Length == 2) {
-                    string cmd = args[0].ToString();
-                    string payload = args[1].ToString();
+        public static void changeLevel(Level level) {
+            if (level == null) {
+                return;
+            }
 
-                    switch(cmd) {
-                        case "SettingsSync":
-                            if (!SemiFunc.IsMasterClient()) {
-                                RepoAdminMenu.mls.LogInfo("Syncing settings with Master Client");
-                                Settings.loadFromJson(payload);
-                            }
-                            break;
-                        default:
-                            RepoAdminMenu.mls.LogWarning("Network event: Unknown command(" + args.Length + "): " + cmd);
-                            break;
-                    }
-                } else if (args.Length == 3) {
-                    string cmd = args[0].ToString();
-                    string steamId = args[1].ToString();
-                    PlayerAvatar player = SemiFunc.PlayerGetFromSteamID(steamId);
-                    if (player == null) {
-                        RepoAdminMenu.mls.LogWarning("Network event: Invalid player: " + steamId);
-                        return;
-                    }
+            nextLevel = level;
+            RunManager.instance.ChangeLevel(true, false, RunManager.ChangeLevelType.RunLevel);
+        }
 
-                    switch (cmd) {
-                        //case "KickPlayer":
-                        //    if (!SemiFunc.IsMasterClient() && PlayerAvatar.instance.steamID.Equals(steamId)) {
-                        //        RepoAdminMenu.mls.LogInfo("Received kick request");
-                        //        string clientSecret = args[2].ToString();
-                        //        if (clientSecret.Length != 16) {
-                        //            RepoAdminMenu.mls.LogInfo("Sending secret to master client to confirm kick");
-                        //            clientRandomString = randomString(16);
-                        //            SendCommandSteamIDString("KickPlayerAck", steamId, clientRandomString, ReceiverGroup.MasterClient);
-                        //        } else if (clientSecret.Equals(clientRandomString)) {
-                        //            RepoAdminMenu.mls.LogInfo("I was kicked :(");
-                        //            NetworkManager.instance.LeavePhotonRoom();
-                        //            clientRandomString = "";
-                        //        }
-                        //    }
-                        //    break;
-                        //case "KickPlayerAck":
-                        //    if (SemiFunc.IsMasterClient()) {
-                        //        RepoAdminMenu.mls.LogInfo("Sending kick acknowledge: " + SemiFunc.PlayerGetName(player));
-                        //        SendCommandSteamIDString("KickPlayer", steamId, args[2].ToString(), ReceiverGroup.Others);
-                        //    }
-                        //    break;
-                        default:
-                            RepoAdminMenu.mls.LogWarning("Unknown command(" + args.Length + "): " + cmd);
-                            break;
-                    }
-                } else if (args.Length == 4) {
-                    string cmd = args[0].ToString();
-                    string steamId = args[1].ToString();
-                    PlayerAvatar player = SemiFunc.PlayerGetFromSteamID(steamId);
-                    if (player == null) {
-                        RepoAdminMenu.mls.LogWarning("Network event: Invalid player: " + steamId);
-                        return;
-                    }
+        public static Level getNextLevel() {
+            return nextLevel;
+        }
 
-                    switch (cmd) {
-                        case "UpgradeSync":
-                            UpgradeUtil.UpgradeSync(player, args[2].ToString(), (int) args[3]);
-                            break;
-                        default:
-                            RepoAdminMenu.mls.LogWarning("Unknown command(" + args.Length + "): " + cmd);
-                            break;
+        public static void clearNextLevel() {
+            nextLevel = null;
+        }
+
+        public static void resetLevels() {
+            if (RunManager.instance == null) {
+                return;
+            }
+
+            foreach (KeyValuePair<Level, bool> entry in new List<KeyValuePair<Level, bool>>(mapToggles)) {
+                Level level = entry.Key;
+                if (level == null) {
+                    continue;
+                }
+
+                if (!entry.Value) {
+                    if (RunManager.instance.levels.Contains(level)) {
+                        RunManager.instance.levels.Remove(level);
                     }
                 } else {
-                    RepoAdminMenu.mls.LogWarning("Received network event with incorrect argument count: " + args.Length);
-                    return;
+                    if (!RunManager.instance.levels.Contains(level)) {
+                        RunManager.instance.levels.Add(level);
+                    }
                 }
             }
         }

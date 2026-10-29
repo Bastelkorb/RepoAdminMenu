@@ -1,0 +1,57 @@
+$ErrorActionPreference = "Stop"
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$gameRoot = $env:REPO_GAME_ROOT
+$bepInExDir = $env:BEPINEX_DIR
+$modLibDir = $env:REPO_MOD_LIBS_DIR
+
+if (-not $gameRoot) {
+    $candidates = @(
+        "${env:ProgramFiles(x86)}\Steam\steamapps\common\R.E.P.O",
+        "${env:ProgramFiles}\Steam\steamapps\common\R.E.P.O",
+        "$HOME\Games\R.E.P.O",
+        "$HOME\Desktop\R.E.P.O"
+    )
+
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path (Join-Path $candidate "R.E.P.O.exe"))) {
+            $gameRoot = $candidate
+            break
+        }
+    }
+}
+
+if (-not $gameRoot) {
+    Write-Error "Could not locate R.E.P.O. game directory. Set REPO_GAME_ROOT or pass -p:GameRoot."
+    exit 1
+}
+
+if (-not $bepInExDir -and (Test-Path (Join-Path $gameRoot "BepInEx\core\BepInEx.dll"))) {
+    $bepInExDir = Join-Path $gameRoot "BepInEx"
+}
+
+if (-not $bepInExDir) {
+    Write-Error "Could not locate BepInEx. Set BEPINEX_DIR or install BepInEx under $gameRoot."
+    exit 1
+}
+
+if (-not $modLibDir) {
+    $possiblePluginDir = Join-Path $gameRoot "BepInEx\plugins"
+    if (Test-Path (Join-Path $possiblePluginDir "MenuLib.dll")) {
+        $modLibDir = $possiblePluginDir
+    }
+}
+
+if (-not $modLibDir) {
+    Write-Error "Could not locate MenuLib/REPOLib. Set REPO_MOD_LIBS_DIR or install the dependencies in $gameRoot\BepInEx\plugins."
+    exit 1
+}
+
+Write-Host "Using GameRoot: $gameRoot"
+Write-Host "Using BepInExDir: $bepInExDir"
+Write-Host "Using ModLibDir: $modLibDir"
+
+& dotnet build (Join-Path $scriptDir "RepoAdminMenu.csproj") -c Release -p:GameRoot="$gameRoot" -p:BepInExDir="$bepInExDir" -p:ModLibDir="$modLibDir"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Write-Host "Build completed successfully."

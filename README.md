@@ -1,30 +1,35 @@
-# RepoAdminMenu [![Github All Releases](https://img.shields.io/github/downloads/proferabg/RepoAdminMenu/total.svg)]()
+using HarmonyLib;
+using RepoAdminMenu.Utils;
 
-To open the menu, type `!menu` in chat or press `F8`.
+namespace RepoAdminMenu.Patches {
 
-Command can be disabled and the keybind can be remapped using the config.
+    [HarmonyPatch(typeof(NetworkConnect))]
+    internal class NetworkConnectPatch {
 
-***For best results, install the mod on both the server and the client!***
+        [HarmonyPatch("Start")]
+        [HarmonyPostfix]
+        private static void Start_Postfix() {
+            NetworkUtil.Init();
+        }
 
-## Image Previews
+        [HarmonyPatch("OnCreatedRoom")]
+        [HarmonyPostfix]
+        private static void OnCreatedRoom_Postfix() {
+            if (Configuration.ResetSettingsOnLobbyCreation.Value) {
+                RepoAdminMenu.mls.LogInfo("Resetting settings");
+                Settings.instance = new Settings();
+            }
+        }
 
-#### Main Menu
-[![Main Menu](https://i.imgur.com/1Q7Sr6r.png)]()
+        [HarmonyPatch("OnJoinedRoom")]
+        [HarmonyPostfix]
+        private static void OnJoinedRoom_Postfix() {
+            if (NetworkUtil.instance == null) {
+                NetworkUtil.Init();
+            }
 
-#### Player Menu Top
-[![Player Menu](https://i.imgur.com/85IvvYJ.jpeg)]()
-
-#### Player Menu Bottom
-[![Player Menu](https://i.imgur.com/wRUiVeO.jpeg)]()
-
-#### Player Upgrade Menu
-[![Player Menu](https://i.imgur.com/O1lTKA4.jpeg)]()
-
-#### Spawning Menu
-[![Player Menu](https://i.imgur.com/hZHuAah.png)]()
-
-#### Map Menu
-[![Player Menu](https://i.imgur.com/YiNAh7P.jpeg)]()
-
-#### Settings Menu
-[![Player Menu](https://i.imgur.com/xrj0ejF.jpeg)]()
+            NetworkUtil.instance.clientRandomString = string.Empty;
+            NetworkUtil.SendCommand("NeedSettings", Photon.Realtime.ReceiverGroup.MasterClient);
+        }
+    }
+}

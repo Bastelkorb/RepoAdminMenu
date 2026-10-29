@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
 
@@ -11,7 +11,7 @@ namespace RepoAdminMenu {
 
         private const string mod_guid = "proferabg.REPO.RepoAdminMenu";
         private const string mod_name = "Repo Admin Menu";
-        private const string mod_version = "1.0.16";
+        private const string mod_version = "1.1.0";
 
         private static RepoAdminMenu _plugin;
 
@@ -20,20 +20,20 @@ namespace RepoAdminMenu {
         public static ManualLogSource mls;
 
         public void Awake() {
-            // Plugin startup logic
             if (_plugin == null) {
                 _plugin = this;
             }
-            mls = BepInEx.Logging.Logger.CreateLogSource(mod_name);
+
+            mls = Logger.CreateLogSource(mod_name);
 
             Configuration.Init(Config);
             Settings.Init();
+            NetworkUtil.Init();
+            Menu.Init();
 
             harmony.PatchAll();
 
             mls.LogInfo($"R.A.M. ({mod_version}) has been allocated!");
         }
-
     }
-    
 }

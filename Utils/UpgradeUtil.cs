@@ -1,137 +1,162 @@
-﻿using Photon.Realtime;
-using REPOLib.Modules;
-using System;
+using Newtonsoft.Json;
+using Photon.Realtime;
+using RepoAdminMenu.Utils;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 
-namespace RepoAdminMenu.Utils {
-    internal class UpgradeUtil {
+namespace RepoAdminMenu {
+    internal class Settings {
 
-        private static SortedDictionary<string, PlayerUpgrade> modUpgrades = new SortedDictionary<string, PlayerUpgrade>();
-        private static SortedDictionary<string, GameUpgrade> gameUpgrades = new SortedDictionary<string, GameUpgrade>() {
-            { "playerUpgradeCrouchRest", new GameUpgrade("playerUpgradeCrouchRest", "Crouch Rest", PunManager.instance.UpdateCrouchRestRightAway) },
-            { "playerUpgradeHealth", new GameUpgrade("playerUpgradeHealth", "Health", PunManager.instance.UpdateCrouchRestRightAway) },
-            { "playerUpgradeExtraJump", new GameUpgrade("playerUpgradeExtraJump", "Jump", PunManager.instance.UpdateExtraJumpRightAway) },
-            { "playerUpgradeLaunch", new GameUpgrade("playerUpgradeLaunch", "Launch", PunManager.instance.UpdateTumbleLaunchRightAway) },
-            { "playerUpgradeMapPlayerCount", new GameUpgrade("playerUpgradeMapPlayerCount", "Map Player Count", PunManager.instance.UpdateMapPlayerCountRightAway) },
-            { "playerUpgradeRange", new GameUpgrade("playerUpgradeRange", "Range", PunManager.instance.UpdateGrabRangeRightAway) },
-            { "playerUpgradeSpeed", new GameUpgrade("playerUpgradeSpeed", "Speed", PunManager.instance.UpdateSprintSpeedRightAway) },
-            { "playerUpgradeStamina", new GameUpgrade("playerUpgradeStamina", "Stamina", PunManager.instance.UpdateEnergyRightAway) },
-            { "playerUpgradeStrength", new GameUpgrade("playerUpgradeStrength", "Strength", PunManager.instance.UpdateGrabStrengthRightAway) },
-            { "playerUpgradeThrow", new GameUpgrade("playerUpgradeThrow", "Throw", PunManager.instance.UpdateThrowStrengthRightAway) },
-            { "playerUpgradeTumbleWings", new GameUpgrade("playerUpgradeTumbleWings", "Tumble Wings", PunManager.instance.UpdateTumbleWingsRightAway) },
-            { "playerUpgradeTumbleClimb", new GameUpgrade("playerUpgradeTumbleClimb", "Tumble Climb", PunManager.instance.UpdateTumbleClimbRightAway) },
-            { "playerUpgradeDeathHeadBattery", new GameUpgrade("playerUpgradeDeathHeadBattery", "Death Head Battery", PunManager.instance.UpdateDeathHeadBatteryRightAway) },
-        };
+        internal static Settings instance;
+
+        public Settings() {
+            instance = this;
+        }
 
         public static void Init() {
-            modUpgrades.Clear();
-            foreach (PlayerUpgrade upgrade in Upgrades.PlayerUpgrades.ToList()) {
-                string name = Regex.Replace(upgrade.UpgradeId, @"((?<=\p{Ll})\p{Lu})|((?!\A)\p{Lu}(?>\p{Ll}))", " $0");
-                if (!modUpgrades.ContainsKey(name))
-                    modUpgrades.Add(name, upgrade);
+            if (instance == null) {
+                instance = new Settings();
             }
         }
 
-        public static SortedDictionary<string, GameUpgrade> GetGameUpgrades() {
-            return gameUpgrades;
-        }
+        public bool infiniteMoney = false,
+            noBreak = false,
+            noBatteryDrain = false,
+            noTraps = false,
+            weakEnemies = false,
+            deafEnemies = false,
+            blindEnemies = false,
+            boomhammer = false,
+            friendlyDuck = false,
+            useShopUpgrades = false;
 
-        public static SortedDictionary<string, PlayerUpgrade> GetModUpgrades() {
-            return modUpgrades;
-        }
+        public List<string> godModePlayers = new List<string>(),
+            noDeathPlayers = new List<string>(),
+            infiniteStaminaPlayers = new List<string>(),
+            noTargetPlayers = new List<string>(),
+            noTumblePlayers = new List<string>();
 
-        public static void UpgradeLevel(PlayerUpgrade upgrade, PlayerAvatar avatar, int level) {
-            upgrade.SetLevel(avatar, level);
-            RepoAdminMenu.mls.LogInfo("Upgrade: " + SemiFunc.PlayerGetName(avatar) + " - '" + upgrade.UpgradeId + "' -> " + level);
-        }
-        public static int GetPlayerUpgradeLevel(string type, PlayerAvatar avatar) {
-            StatsManager statsManager = StatsManager.instance;
-            string playerSteamId = SemiFunc.PlayerGetSteamID(avatar);
+        public Dictionary<string, long> forcedTumble = new Dictionary<string, long>();
 
-            if (statsManager != null) {
-                if (statsManager.dictionaryOfDictionaries.ContainsKey(type)) {
-                    Dictionary<string, int> upgradeType = statsManager.dictionaryOfDictionaries[type];
-                    if (upgradeType != null && upgradeType.ContainsKey(playerSteamId)) {
-                        return upgradeType[playerSteamId];
-                    }
+        public static void toggle(List<string> list, string steamId, bool enabled) {
+            if (list == null || string.IsNullOrEmpty(steamId)) {
+                return;
+            }
+
+            if (enabled) {
+                if (!list.Contains(steamId)) {
+                    list.Add(steamId);
                 }
+            } else {
+                list.Remove(steamId);
             }
-            return 0;
+
+            UpdateClients();
         }
 
-        public static void UpgradeSync(PlayerAvatar avatar, string key, int level) {
-            RepoAdminMenu.mls.LogInfo("UpgradeSync: " + SemiFunc.PlayerGetName(avatar) + " - '" + key + "' -> " + level);
-            string steamId = SemiFunc.PlayerGetSteamID(avatar);
-            SortedDictionary<string, Dictionary<string, int>> dicts = StatsManager.instance.dictionaryOfDictionaries;
-
-            if (!dicts.ContainsKey(key)) {
-                dicts.Add(key, new Dictionary<string, int>());
+        public static void toggleDictLong(Dictionary<string, long> list, string steamId, bool enabled) {
+            if (list == null || string.IsNullOrEmpty(steamId)) {
+                return;
             }
 
-            Dictionary<string, int> dict = new Dictionary<string, int>();
-
-            if (dicts.TryGetValue(key, out dict)) {
-                dict[steamId] = level;
-            }
-
-            // process upgrade locally
-            if (avatar == PlayerAvatar.instance) {
-                DoImmediateUpgrade(avatar, key, level);
-            }
-        }
-
-        private static void DoImmediateUpgrade(PlayerAvatar avatar, string key, int level) {
-            string steamId = SemiFunc.PlayerGetSteamID(avatar);
-            RepoAdminMenu.mls.LogInfo("DoImmediateUpgrade: " + SemiFunc.PlayerGetName(avatar) + " - '" + key + "'");
-            try {
-                if (gameUpgrades.TryGetValue(key, out var value))
-                    value.PunUpgrade(avatar, level);
-            } catch { }
-        }
-
-        public class GameUpgrade {
-            private string id;
-            private string name;
-            private Action<string, int> punManagerFunction;
-
-            public GameUpgrade(string id, string name, Action<string, int> punManagerFunction) {
-                this.id = id;
-                this.name = name;
-                this.punManagerFunction = punManagerFunction;
-            }
-
-            public string GetID() {
-                return id;
-            }
-
-            public string GetName() { 
-                return name; 
-            }
-
-            public int GetPlayerLevel(PlayerAvatar avatar) {
-                return GetPlayerUpgradeLevel(id, avatar);
-            }
-
-            public void Upgrade(PlayerAvatar avatar, int level) {
-                RepoAdminMenu.mls.LogInfo("Upgrade: " + SemiFunc.PlayerGetName(avatar) + " - '" + id + "' -> " + level);
-                if (SemiFunc.IsMultiplayer()) {
-                    NetworkUtil.SendCommandSteamIDStringInt("UpgradeSync", avatar.steamID, id, level, ReceiverGroup.All);
-                } else {
-                    UpgradeSync(avatar, id, level);
+            if (enabled) {
+                if (!list.ContainsKey(steamId)) {
+                    list[steamId] = 0L;
                 }
+            } else {
+                list.Remove(steamId);
             }
 
-            public void PunUpgrade(PlayerAvatar avatar, int level) {
-                if (punManagerFunction != null) {
-                    string steamId = SemiFunc.PlayerGetSteamID(avatar);
-                    punManagerFunction.Invoke(steamId, level);
-                 }
-
-            }
-
+            UpdateClients();
         }
 
+        public static bool isGod(PlayerAvatar avatar) {
+            return avatar != null && instance != null && instance.godModePlayers.Contains(SemiFunc.PlayerGetSteamID(avatar));
+        }
+
+        public static bool isNoDeath(PlayerAvatar avatar) {
+            return avatar != null && instance != null && instance.noDeathPlayers.Contains(SemiFunc.PlayerGetSteamID(avatar));
+        }
+
+        public static bool isInfiniteStamina(PlayerAvatar avatar) {
+            return avatar != null && instance != null && instance.infiniteStaminaPlayers.Contains(SemiFunc.PlayerGetSteamID(avatar));
+        }
+
+        public static bool isNoTarget(PlayerAvatar avatar) {
+            return avatar != null && instance != null && instance.noTargetPlayers.Contains(SemiFunc.PlayerGetSteamID(avatar));
+        }
+
+        public static bool isNoTumble(PlayerAvatar avatar) {
+            return avatar != null && instance != null && instance.noTumblePlayers.Contains(SemiFunc.PlayerGetSteamID(avatar));
+        }
+
+        public static bool isForceTumble(PlayerAvatar avatar) {
+            return avatar != null && instance != null && instance.forcedTumble.ContainsKey(SemiFunc.PlayerGetSteamID(avatar));
+        }
+
+        internal static long getLastForceTumble(PlayerAvatar avatar) {
+            if (avatar == null || instance == null) {
+                return 0L;
+            }
+
+            return instance.forcedTumble.GetValueOrDefault(SemiFunc.PlayerGetSteamID(avatar), 0L);
+        }
+
+        internal static long setLastForceTumble(PlayerAvatar avatar, long lastTumble) {
+            if (avatar == null || instance == null) {
+                return 0L;
+            }
+
+            return instance.forcedTumble[SemiFunc.PlayerGetSteamID(avatar)] = lastTumble;
+        }
+
+        public static void UpdateOption(ref bool option, bool value) {
+            option = value;
+            UpdateClients();
+        }
+
+        public static void UpdateClients() {
+            if (instance == null || !SemiFunc.IsMasterClient()) {
+                return;
+            }
+
+            RepoAdminMenu.mls.LogInfo("Sending Settings Sync");
+            NetworkUtil.SendCommandString("SettingsSync", instance.toJson(), ReceiverGroup.Others);
+        }
+
+        public string toJson() {
+            return JsonConvert.SerializeObject(this);
+        }
+
+        public static void loadFromJson(string json) {
+            if (string.IsNullOrWhiteSpace(json)) {
+                return;
+            }
+
+            var loaded = JsonConvert.DeserializeObject<Settings>(json);
+            if (loaded != null) {
+                instance = loaded;
+            }
+        }
+
+        internal void log() {
+            RepoAdminMenu.mls.LogInfo("\n\n\n" + instance.toJson() + "\n\n\n");
+            RepoAdminMenu.mls.LogInfo("Current Settings:\n" +
+                "  infiniteMoney - " + instance.infiniteMoney + "\n" +
+                "  noBreak - " + instance.noBreak + "\n" +
+                "  noBatteryDrain - " + instance.noBatteryDrain + "\n" +
+                "  noTraps - " + instance.noTraps + "\n" +
+                "  weakEnemies - " + instance.weakEnemies + "\n" +
+                "  deafEnemies - " + instance.deafEnemies + "\n" +
+                "  blindEnemies - " + instance.blindEnemies + "\n" +
+                "  boomhammer - " + instance.boomhammer + "\n" +
+                "  friendlyDuck - " + instance.friendlyDuck + "\n" +
+                "  useShopUpgrades - " + instance.useShopUpgrades + "\n" +
+                "  godMode: - " + string.Join(",", instance.godModePlayers.Select(player => SemiFunc.PlayerGetName(SemiFunc.PlayerGetFromSteamID(player)))) + "\n" +
+                "  noDeathPlayers: - " + string.Join(",", instance.noDeathPlayers.Select(player => SemiFunc.PlayerGetName(SemiFunc.PlayerGetFromSteamID(player)))) + "\n" +
+                "  infiniteStaminaPlayers: - " + string.Join(",", instance.infiniteStaminaPlayers.Select(player => SemiFunc.PlayerGetName(SemiFunc.PlayerGetFromSteamID(player)))) + "\n" +
+                "  noTargetPlayers: - " + string.Join(",", instance.noTargetPlayers.Select(player => SemiFunc.PlayerGetName(SemiFunc.PlayerGetFromSteamID(player)))) + "\n" +
+                "  noTumblePlayers: - " + string.Join(",", instance.noTumblePlayers.Select(player => SemiFunc.PlayerGetName(SemiFunc.PlayerGetFromSteamID(player)))) + "\n");
+        }
     }
 }
