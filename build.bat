@@ -1,89 +1,81 @@
-# RepoAdminMenu
+@echo off
+setlocal enabledelayedexpansion
 
-Repo Admin Menu is a R.E.P.O. in-game admin menu mod built around BepInEx, MenuLib and REPOLib.
+set "SCRIPT_DIR=%~dp0"
+set "GAME_ROOT="
+set "BEPINEX_DIR="
+set "MOD_LIBS_DIR="
 
-The project in this repository is intended to be rebuilt in a local R.E.P.O. installation with the required references present. The source is structured around the current Modding environment used by R.E.P.O. and the mod is designed to remain compatible with the 0.4.x-era APIs while removing the most obvious stability issues in config, upgrades, and multiplayer state handling.
+rem Search typical Steam installations first.
+for %%D in (
+  "%ProgramFiles(x86)%\Steam\steamapps\common\R.E.P.O"
+  "%ProgramFiles%\Steam\steamapps\common\R.E.P.O"
+  "%USERPROFILE%\Desktop\R.E.P.O"
+  "%USERPROFILE%\Games\R.E.P.O"
+  "%USERPROFILE%\AppData\Local\Programs\R.E.P.O"
+) do (
+  if exist "%%~D\R.E.P.O.exe" set "GAME_ROOT=%%~D"
+)
 
-## Supported environment
+rem Search Thunderstore Mod Manager profile paths used by many REPO mod setups.
+if "%GAME_ROOT%"=="" (
+  for /d %%P in ("%USERPROFILE%\AppData\Roaming\Thunderstore Mod Manager\DataFolder\REPO\profiles\*") do (
+    if exist "%%~P\BepInEx\core\BepInEx.dll" (
+      set "GAME_ROOT=%%~P"
+      set "BEPINEX_DIR=%%~P\BepInEx"
+    )
+    if "%GAME_ROOT%"=="" if exist "%%~P\R.E.P.O_Data\Managed\Assembly-CSharp.dll" set "GAME_ROOT=%%~P"
+  )
+)
 
-- Game: R.E.P.O.
-- Modding framework: BepInEx 5
-- UI library: MenuLib
-- Game utility library: REPOLib
-- .NET target: net472
+if "%GAME_ROOT%"=="" if defined REPO_GAME_ROOT set "GAME_ROOT=%REPO_GAME_ROOT%"
+if "%GAME_ROOT%"=="" if defined GAME_ROOT set "GAME_ROOT=%GAME_ROOT%"
 
-## Required local dependencies
+if "%GAME_ROOT%"=="" (
+  echo [RepoAdminMenu] Could not find a local R.E.P.O installation.
+  echo [RepoAdminMenu] Searched Steam, standard folders and Thunderstore profile paths.
+  echo [RepoAdminMenu] Set REPO_GAME_ROOT or pass -p:GameRoot to the game directory.
+  exit /b 1
+)
 
-The repository does not include the actual game assemblies or BepInEx files. Before building, install or locate:
+rem Determine the active BepInEx location.
+if "%BEPINEX_DIR%"=="" if exist "%GAME_ROOT%\BepInEx\core\BepInEx.dll" set "BEPINEX_DIR=%GAME_ROOT%\BepInEx"
+if "%BEPINEX_DIR%"=="" if exist "%GAME_ROOT%\core\BepInEx.dll" set "BEPINEX_DIR=%GAME_ROOT%"
+if "%BEPINEX_DIR%"=="" if defined BEPINEX_DIR set "BEPINEX_DIR=%BEPINEX_DIR%"
 
-- R.E.P.O. game directory
-- BepInEx installed in the game folder
-- MenuLib and REPOLib DLLs in the BepInEx plugins folder or a configured custom mod library directory
+if "%BEPINEX_DIR%"=="" (
+  echo [RepoAdminMenu] Could not find BepInEx in %GAME_ROOT%.
+  echo [RepoAdminMenu] This often means the game is using a Thunderstore profile at:
+  echo [RepoAdminMenu] %USERPROFILE%\AppData\Roaming\Thunderstore Mod Manager\DataFolder\REPO\profiles\
+  echo [RepoAdminMenu] Install BepInEx or set BEPINEX_DIR.
+  exit /b 1
+)
 
-This repository expects either:
+rem Determine the mod library folder.
+if "%MOD_LIBS_DIR%"=="" if exist "%BEPINEX_DIR%\plugins\MenuLib.dll" set "MOD_LIBS_DIR=%BEPINEX_DIR%\plugins"
+if "%MOD_LIBS_DIR%"=="" if exist "%BEPINEX_DIR%\plugins\REPOLib.dll" set "MOD_LIBS_DIR=%BEPINEX_DIR%\plugins"
+if "%MOD_LIBS_DIR%"=="" if exist "%GAME_ROOT%\BepInEx\plugins\MenuLib.dll" set "MOD_LIBS_DIR=%GAME_ROOT%\BepInEx\plugins"
+if "%MOD_LIBS_DIR%"=="" if defined REPO_MOD_LIBS_DIR set "MOD_LIBS_DIR=%REPO_MOD_LIBS_DIR%"
+if "%MOD_LIBS_DIR%"=="" (
+  echo [RepoAdminMenu] Could not find MenuLib or REPOLib.
+  echo [RepoAdminMenu] Install these dependencies in %BEPINEX_DIR%\plugins or set REPO_MOD_LIBS_DIR.
+  exit /b 1
+)
 
-- environment variables: `REPO_GAME_ROOT`, `BEPINEX_DIR`, `REPO_MOD_LIBS_DIR`
-- or command-line properties: `-p:GameRoot=... -p:BepInExDir=... -p:ModLibDir=...`
+where dotnet >nul 2>nul
+if errorlevel 1 (
+  echo [RepoAdminMenu] .NET SDK was not found on PATH.
+  exit /b 1
+)
 
-## Build
+echo [RepoAdminMenu] Using GameRoot: %GAME_ROOT%
+echo [RepoAdminMenu] Using BepInExDir: %BEPINEX_DIR%
+echo [RepoAdminMenu] Using ModLibDir: %MOD_LIBS_DIR%
 
-Windows build script:
+dotnet build "%SCRIPT_DIR%RepoAdminMenu.csproj" -c Release -p:GameRoot="%GAME_ROOT%" -p:BepInExDir="%BEPINEX_DIR%" -p:ModLibDir="%MOD_LIBS_DIR%"
 
-```bat
-build.bat
-```
+if errorlevel 1 (
+  exit /b 1
+)
 
-The build script tries to detect common R.E.P.O. installation locations and then executes:
-
-```bat
-dotnet build RepoAdminMenu.csproj -c Release -p:GameRoot="..." -p:BepInExDir="..." -p:ModLibDir="..."
-```
-
-PowerShell equivalent:
-
-```powershell
-./build.ps1
-```
-
-## Manual build
-
-```powershell
-$env:REPO_GAME_ROOT = "C:\Games\R.E.P.O"
-$env:BEPINEX_DIR = "C:\Games\R.E.P.O\BepInEx"
-$env:REPO_MOD_LIBS_DIR = "C:\Games\R.E.P.O\BepInEx\plugins"
-
-dotnet build RepoAdminMenu.csproj -c Release
-```
-
-## Important notes
-
-- The build will fail with a clear message if the game root, BepInEx, or mod libraries are missing.
-- The mod relies on the actual R.E.P.O. assembly names and class layout. This repository is intentionally built to use real game references when they are available locally.
-- For a runtime install, copy the built DLL into your BepInEx plugins folder after a successful build.
-
-## Known build limitation
-
-This environment does not include a local copy of the R.E.P.O. binaries, BepInEx, MenuLib, or REPOLib. Because of that, the project cannot be fully compiled and validated in this GitHub session without those dependencies being present locally.
-
-## Menu features
-
-- Player list and per-player controls
-- Spawn items, valuables, and enemies
-- Map selection and level manipulation
-- Settings sync for host/client scenarios
-- Upgrade controls for player upgrades
-- Confirmation dialogs for destructive actions
-
-## Configuration
-
-The mod uses BepInEx configuration values. The default hotkey is `F8` and commands are enabled unless disabled in the config.
-
-## Troubleshooting
-
-If the build fails:
-
-1. Confirm the game directory is correct.
-2. Confirm BepInEx is installed under the game directory.
-3. Confirm MenuLib and REPOLib are present in the mod library folder.
-4. Re-run the script with explicit `-p:...` arguments if needed.
-
+echo [RepoAdminMenu] Build completed successfully.
